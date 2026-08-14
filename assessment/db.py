@@ -9,6 +9,7 @@ submissions to survive a restart.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -27,9 +28,13 @@ from sqlalchemy import (
     create_engine,
     delete,
     func,
+    inspect,
     select,
+    text,
 )
 from sqlalchemy.engine import Engine
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SQLITE_PATH = os.environ.get("DB_PATH", "data/submissions.db")
 
@@ -42,6 +47,7 @@ submissions = Table(
     Column("created_at", DateTime(timezone=True), nullable=False, index=True),
     # participant details
     Column("full_name", String(200)),
+    Column("student_id", String(60), index=True),
     Column("email", String(200), index=True),
     Column("age", Integer),
     Column("gender", String(50)),
@@ -96,7 +102,31 @@ def get_engine() -> Engine:
         )
 
     metadata.create_all(_engine)
+    _add_missing_columns(_engine)
     return _engine
+
+
+# SQLAlchemy's create_all only creates missing tables, never missing columns, so
+# a table created by an older version of this app keeps its old shape. Both
+# SQLite and Postgres accept a plain ADD COLUMN, which is all this schema needs;
+# letting the dialect compile the type keeps JSON and timestamp columns correct.
+def _add_missing_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table(submissions.name):
+        return
+    existing = {col["name"] for col in inspector.get_columns(submissions.name)}
+    for column in submissions.columns:
+        if column.name in existing:
+            continue
+        sql_type = column.type.compile(dialect=engine.dialect)
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    f"ALTER TABLE {submissions.name} "
+                    f'ADD COLUMN "{column.name}" {sql_type}'
+                )
+            )
+        logger.info("added missing column %s", column.name)
 
 
 def backend_name() -> str:
@@ -126,6 +156,7 @@ def save_submission(
         "id": submission_id,
         "created_at": datetime.now(timezone.utc),
         "full_name": participant.get("full_name"),
+        "student_id": participant.get("student_id"),
         "email": participant.get("email"),
         "age": participant.get("age"),
         "gender": participant.get("gender"),

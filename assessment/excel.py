@@ -12,6 +12,7 @@ from .instruments import INSTRUMENTS, get_item
 PARTICIPANT_COLUMNS = [
     ("id", "Submission ID"),
     ("created_at", "Submitted at (UTC)"),
+    ("student_id", "Student ID"),
     ("full_name", "Name"),
     ("email", "Email"),
     ("age", "Age"),
@@ -86,6 +87,7 @@ def _responses_frame(
         responses = row.get("responses") or {}
         record: dict[str, Any] = {
             "Submission ID": row.get("id"),
+            "Student ID": row.get("student_id"),
             "Name": row.get("full_name"),
             "Email": row.get("email"),
             "Submitted at (UTC)": _naive_utc(row.get("created_at")),
@@ -174,7 +176,9 @@ def build_workbook(rows: list[dict[str, Any]]) -> bytes:
     # answer side by side, one row per submission.
     if not base.empty:
         combined = base.merge(
-            numeric_items.drop(columns=["Name", "Email", "Submitted at (UTC)"]),
+            numeric_items.drop(
+                columns=["Student ID", "Name", "Email", "Submitted at (UTC)"]
+            ),
             on="Submission ID",
             how="left",
         )

@@ -17,6 +17,15 @@ database that the admin board exports as one combined Excel workbook.
 
 65 questions total, roughly 10–15 minutes to complete.
 
+### Built for a whole cohort sitting it at once
+
+Each page's questions live inside an `st.form`, so answering a question does not
+round-trip to the server — the page is submitted in one go. That is **8 script
+reruns per participant instead of 65**, which is what keeps the app responsive
+when a full class starts at the same time. Streamlit runs each session's script
+in its own thread inside one process, so per-click reruns are the thing that
+actually bites at that concurrency.
+
 ### A note on the ASRS shading
 
 The ASRS screener counts responses that land in the "darkly shaded boxes" of the
@@ -65,6 +74,15 @@ have ephemeral disks**, so on Streamlit Community Cloud, Render or Railway a
 restart wipes a SQLite file. For anything you need to keep, point `DATABASE_URL`
 at a managed Postgres (Supabase, Neon, RDS) and uncomment `psycopg2-binary` in
 `requirements.txt`.
+
+> **Collecting data you cannot re-collect?** Use Postgres. If you are running
+> this once with a cohort, a container recycle on SQLite loses every submission
+> and the session cannot be repeated. No code change is needed — set
+> `DATABASE_URL` and the app uses it.
+
+The schema self-migrates: missing columns are added with `ALTER TABLE` on
+startup, so upgrading the app over an existing database does not require
+dropping it.
 
 ### Keep-alive
 

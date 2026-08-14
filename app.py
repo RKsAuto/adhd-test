@@ -90,49 +90,55 @@ def _progress() -> None:
     st.progress((index) / (TOTAL_STEPS - 1), text=f"Step {index + 1} of {TOTAL_STEPS}")
 
 
-def _render_items(inst: Instrument, start: int, end: int) -> list[str]:
-    """Render items ``start``..``end`` and return the ids still unanswered."""
+def _page_items(inst: Instrument, start: int, end: int) -> list:
+    return [item for item in inst.items if start <= item.number <= end]
+
+
+def _render_items(items: list) -> None:
+    """Render the radio for each item.
+
+    These live inside an ``st.form``, so changing one does not rerun the
+    script - the whole page is submitted in a single round trip. On a
+    65-question battery that is 8 reruns per participant instead of 65,
+    which is what makes a whole class sitting the test at once comfortable.
+    """
     responses = st.session_state.responses
-    unanswered: list[str] = []
 
-    for item in inst.items:
-        if not (start <= item.number <= end):
-            continue
-
-        current = responses.get(item.id)
-        labels = item.labels
+    for item in items:
+        widget_key = f"widget_{item.id}"
         index = None
-        if current is not None:
-            values = [value for _, value in item.options]
-            if current in values:
-                index = values.index(current)
+        if widget_key not in st.session_state:
+            current = responses.get(item.id)
+            if current is not None:
+                values = [value for _, value in item.options]
+                if current in values:
+                    index = values.index(current)
 
         st.markdown(f"**{item.number}. {item.text}**")
-        choice = st.radio(
+        st.radio(
             label=f"Response for item {item.number}",
-            options=labels,
+            options=item.labels,
             index=index,
-            key=f"widget_{item.id}",
-            horizontal=len(labels) <= 7 and max(len(l) for l in labels) <= 24,
+            key=widget_key,
+            horizontal=(
+                len(item.labels) <= 7 and max(len(l) for l in item.labels) <= 24
+            ),
             label_visibility="collapsed",
         )
+        st.write("")
+
+
+def _harvest_items(items: list) -> list[str]:
+    """Copy submitted widget values into responses; return unanswered ids."""
+    responses = st.session_state.responses
+    unanswered: list[str] = []
+    for item in items:
+        choice = st.session_state.get(f"widget_{item.id}")
         if choice is None:
             unanswered.append(item.id)
         else:
             responses[item.id] = item.value_of(choice)
-        st.write("")
-
     return unanswered
-
-
-def _nav(on_next=None, next_label: str = "Next", allow_back: bool = True) -> None:
-    left, right = st.columns([1, 1])
-    if allow_back and st.session_state.page_index > 0:
-        if left.button("Back", use_container_width=True):
-            _goto(st.session_state.page_index - 1)
-    if right.button(next_label, type="primary", use_container_width=True):
-        if on_next is None or on_next():
-            _goto(st.session_state.page_index + 1)
 
 
 # --------------------------------------------------------------------------
@@ -175,48 +181,70 @@ def _page_intro() -> None:
         _goto(1)
 
 
+GENDER_OPTIONS = ["Prefer not to say", "Female", "Male", "Non-binary", "Other"]
+
+
 def _page_details() -> None:
     st.header("About you")
-    st.caption("Only your name is required. Everything else is optional.")
+    st.caption("Your name and student ID are required. Everything else is optional.")
 
     participant = st.session_state.participant
-    participant["full_name"] = st.text_input(
-        "Full name", value=participant.get("full_name", "")
-    )
-    participant["email"] = st.text_input("Email", value=participant.get("email", ""))
+    st.session_state.setdefault("w_full_name", participant.get("full_name", ""))
+    st.session_state.setdefault("w_student_id", participant.get("student_id", ""))
+    st.session_state.setdefault("w_email", participant.get("email", ""))
+    st.session_state.setdefault("w_age", participant.get("age"))
+    st.session_state.setdefault("w_gender", participant.get("gender", GENDER_OPTIONS[0]))
+    st.session_state.setdefault("w_occupation", participant.get("occupation", ""))
 
-    col1, col2 = st.columns(2)
-    age_value = participant.get("age")
-    participant["age"] = col1.number_input(
-        "Age",
-        min_value=0,
-        max_value=120,
-        value=age_value if isinstance(age_value, int) else None,
-        placeholder="Optional",
-    )
-    gender_options = [
-        "Prefer not to say",
-        "Female",
-        "Male",
-        "Non-binary",
-        "Other",
-    ]
-    participant["gender"] = col2.selectbox(
-        "Gender",
-        gender_options,
-        index=gender_options.index(participant.get("gender", "Prefer not to say")),
-    )
-    participant["occupation"] = st.text_input(
-        "Occupation", value=participant.get("occupation", "")
+    with st.form("form_details"):
+        st.text_input("Full name", key="w_full_name")
+        st.text_input(
+            "Student ID",
+            key="w_student_id",
+            help="Your roll or enrolment number, so results can be matched to the "
+            "class list.",
+        )
+        st.text_input("Email", key="w_email")
+
+        col1, col2 = st.columns(2)
+        col1.number_input(
+            "Age", min_value=0, max_value=120, placeholder="Optional", key="w_age"
+        )
+        col2.selectbox("Gender", GENDER_OPTIONS, key="w_gender")
+        st.text_input("Occupation", key="w_occupation")
+
+        left, right = st.columns([1, 1])
+        back = left.form_submit_button("Back", use_container_width=True)
+        nxt = right.form_submit_button(
+            "Next", type="primary", use_container_width=True
+        )
+
+    if not (back or nxt):
+        return
+
+    participant.update(
+        {
+            "full_name": st.session_state.w_full_name,
+            "student_id": st.session_state.w_student_id,
+            "email": st.session_state.w_email,
+            "age": st.session_state.w_age,
+            "gender": st.session_state.w_gender,
+            "occupation": st.session_state.w_occupation,
+        }
     )
 
-    def validate() -> bool:
-        if not (participant.get("full_name") or "").strip():
-            st.error("Please enter your name.")
-            return False
-        return True
+    if back:
+        _goto(st.session_state.page_index - 1)
 
-    _nav(on_next=validate)
+    problems = []
+    if not (participant.get("full_name") or "").strip():
+        problems.append("your name")
+    if not (participant.get("student_id") or "").strip():
+        problems.append("your student ID")
+    if problems:
+        st.error(f"Please enter {' and '.join(problems)}.")
+        return
+    _goto(st.session_state.page_index + 1)
 
 
 def _page_instrument(page: dict) -> None:
@@ -232,18 +260,31 @@ def _page_instrument(page: dict) -> None:
     if inst.anchors:
         st.caption(" · ".join(inst.anchors))
 
-    unanswered = _render_items(inst, page["start"], page["end"])
+    items = _page_items(inst, page["start"], page["end"])
 
-    def validate() -> bool:
-        if unanswered:
-            st.error(
-                f"Please answer every question - {len(unanswered)} still "
-                "unanswered on this page."
-            )
-            return False
-        return True
+    with st.form(f"form_{inst.key}_{page['start']}_{page['end']}"):
+        _render_items(items)
+        left, right = st.columns([1, 1])
+        back = left.form_submit_button("Back", use_container_width=True)
+        nxt = right.form_submit_button(
+            "Next", type="primary", use_container_width=True
+        )
 
-    _nav(on_next=validate)
+    if not (back or nxt):
+        return
+
+    # Save whatever was answered either way, so Back never loses work.
+    unanswered = _harvest_items(items)
+
+    if back:
+        _goto(st.session_state.page_index - 1)
+    if unanswered:
+        st.error(
+            f"Please answer every question - {len(unanswered)} still "
+            "unanswered on this page."
+        )
+        return
+    _goto(st.session_state.page_index + 1)
 
 
 def _page_review() -> None:
@@ -274,9 +315,12 @@ def _page_review() -> None:
             _goto(page_index)
 
     st.divider()
-    st.session_state.participant["notes"] = st.text_area(
+    st.session_state.setdefault(
+        "w_notes", st.session_state.participant.get("notes", "")
+    )
+    st.text_area(
         "Anything you would like to add? (optional)",
-        value=st.session_state.participant.get("notes", ""),
+        key="w_notes",
         placeholder="Context you would like whoever reviews this to know.",
     )
 
@@ -292,6 +336,7 @@ def _page_review() -> None:
         use_container_width=True,
         disabled=not all_complete,
     ):
+        st.session_state.participant["notes"] = st.session_state.get("w_notes", "")
         results = score_all(responses)
         duration = int(time.time() - st.session_state.started_at)
         try:
@@ -375,9 +420,9 @@ def _page_results() -> None:
             "celebrated",
         ):
             st.session_state.pop(key, None)
-        for item_id in list(st.session_state.keys()):
-            if str(item_id).startswith("widget_"):
-                st.session_state.pop(item_id, None)
+        for state_key in list(st.session_state.keys()):
+            if str(state_key).startswith(("widget_", "w_")):
+                st.session_state.pop(state_key, None)
         st.rerun()
 
 

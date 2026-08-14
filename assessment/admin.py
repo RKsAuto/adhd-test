@@ -87,6 +87,7 @@ def _submissions_table(rows: list[dict]) -> pd.DataFrame:
         [
             {
                 "Submitted (UTC)": r.get("created_at"),
+                "Student ID": r.get("student_id"),
                 "Name": r.get("full_name"),
                 "Email": r.get("email"),
                 "Age": r.get("age"),
@@ -109,9 +110,8 @@ def _detail_view(rows: list[dict]) -> None:
         return
     st.subheader("Inspect a submission")
     labels = {
-        f"{r.get('created_at')} - {r.get('full_name') or 'Anonymous'} ({r['id'][:8]})": r[
-            "id"
-        ]
+        f"{r.get('created_at')} - {r.get('student_id') or '?'} - "
+        f"{r.get('full_name') or 'Anonymous'} ({r['id'][:8]})": r["id"]
         for r in rows
     }
     chosen = st.selectbox("Submission", list(labels.keys()), index=0)
@@ -126,6 +126,7 @@ def _detail_view(rows: list[dict]) -> None:
         st.write(
             {
                 "Name": submission.get("full_name"),
+                "Student ID": submission.get("student_id"),
                 "Email": submission.get("email"),
                 "Age": submission.get("age"),
                 "Gender": submission.get("gender"),
@@ -208,7 +209,7 @@ def render() -> None:
             "Date range", ["All time", "Last 7 days", "Last 30 days", "Last 90 days"]
         )
         only_positive = col2.checkbox("ASRS screen positive only")
-        search = col3.text_input("Search name or email")
+        search = col3.text_input("Search name, student ID or email")
 
     filtered = rows
     if days != "All time":
@@ -228,6 +229,7 @@ def render() -> None:
             r
             for r in filtered
             if needle in (r.get("full_name") or "").lower()
+            or needle in (r.get("student_id") or "").lower()
             or needle in (r.get("email") or "").lower()
         ]
 
