@@ -134,6 +134,14 @@ def backend_name() -> str:
     return "PostgreSQL" if url else f"SQLite ({DEFAULT_SQLITE_PATH})"
 
 
+def is_ephemeral() -> bool:
+    """True when submissions sit on a local file rather than a real server.
+
+    Fine locally; on a hosted container it means a restart loses everything.
+    """
+    return not os.environ.get("DATABASE_URL", "").strip()
+
+
 def save_submission(
     participant: dict[str, Any],
     responses: dict[str, int],

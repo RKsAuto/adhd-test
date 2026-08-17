@@ -9,6 +9,7 @@ Run with:  streamlit run app.py
 
 from __future__ import annotations
 
+import os
 import time
 
 import streamlit as st
@@ -28,9 +29,39 @@ st.set_page_config(
 # --------------------------------------------------------------------------
 # Page plan - long instruments are split so no single screen is overwhelming
 # --------------------------------------------------------------------------
+SECRET_KEYS = ("ADMIN_KEY", "DATABASE_URL", "DB_PATH", "SELF_PING_URL",
+               "SELF_PING_INTERVAL")
+
+
+def _bridge_secrets() -> None:
+    """Mirror Streamlit secrets into the environment.
+
+    ``db`` and ``keepalive`` are deliberately framework-free and read
+    ``os.environ``. Streamlit Cloud currently also exports secrets as
+    environment variables, but relying on that would mean a mistyped or
+    unexported DATABASE_URL silently falls back to SQLite - which on an
+    ephemeral disk loses data. Copying them here makes the behaviour explicit
+    and version-independent. Real environment variables still win.
+    """
+    try:
+        secrets = st.secrets
+    except Exception:  # no secrets.toml configured at all
+        return
+    for key in SECRET_KEYS:
+        if os.environ.get(key):
+            continue
+        try:
+            value = secrets.get(key)
+        except Exception:
+            value = None
+        if value not in (None, ""):
+            os.environ[key] = str(value)
+
+
 @st.cache_resource
 def _boot() -> dict:
     """One-time process setup: database tables and the keep-alive thread."""
+    _bridge_secrets()
     db.get_engine()
     return keepalive.start()
 

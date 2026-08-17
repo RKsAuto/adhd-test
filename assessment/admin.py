@@ -193,7 +193,18 @@ def render() -> None:
 
     rows = db.fetch_all()
 
-    st.caption(f"Storage backend: {db.backend_name()}")
+    if db.is_ephemeral():
+        st.error(
+            f"**Storing to {db.backend_name()}.** On a hosted container this disk "
+            "is wiped when the container restarts, and these submissions would be "
+            "lost for good. If you meant to use Postgres, `DATABASE_URL` has not "
+            "reached the app - check it is set in this host's secrets, then "
+            "reboot the app and confirm this banner is gone. Export anything you "
+            "already need before then.",
+            icon="🚨",
+        )
+    else:
+        st.caption(f"Storage backend: {db.backend_name()}")
     _summary_metrics(rows)
     st.divider()
 

@@ -4,5 +4,7 @@ openpyxl>=3.1
 SQLAlchemy>=2.0
 requests>=2.31
 
-# Uncomment when pointing DATABASE_URL at Postgres
-# psycopg2-binary>=2.9
+# Postgres driver. Installed by default on purpose: if DATABASE_URL is set on a
+# host without this, the app fails at connection time rather than at build time,
+# which is the worst moment to find out. Harmless when running on SQLite.
+psycopg2-binary>=2.9
