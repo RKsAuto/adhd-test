@@ -45,6 +45,8 @@ student IDs. Keep it out of the repo and off shared slides.
 
 1. Push this repo to GitHub (already done on your branch).
 2. share.streamlit.io → **New app** → pick the repo, branch, and `app.py`.
+   Under **Advanced settings**, set the Python version to **3.11**, which is
+   what this was tested on. Anything from 3.9 up will run.
 3. Before the first run, open **Advanced settings → Secrets** and paste:
 
    ```toml
