@@ -97,7 +97,25 @@ def _page_db_error(message: str) -> None:
             }
         )
 
-        if target.get("supabase_direct"):
+        if "password authentication failed" in (message or "").lower():
+            st.warning(
+                "**The host was reached and rejected the password.** DNS and "
+                "networking are fine, so this is only the credential.\n\n"
+                "- Use the **database** password, not your Supabase account "
+                "password. They are different.\n"
+                "- If you never set one, or are unsure, reset it: Supabase "
+                "*Database → Settings → Reset database password*. Choose a "
+                "**letters-and-numbers-only** password — that removes any "
+                "chance of a URL-encoding problem.\n"
+                "- Then update `DATABASE_URL` with the new password and "
+                "reboot.\n\n"
+                "The error naming user `postgres` is expected on the pooler "
+                "even though you connect as "
+                "`postgres.<project-ref>`; it authenticates the underlying "
+                "role. Your username is not the problem.",
+                icon="🔑",
+            )
+        elif target.get("supabase_direct"):
             st.warning(
                 "**This is Supabase's direct connection host, which is "
                 "IPv6-only.** Streamlit Cloud has no IPv6, so it can never "

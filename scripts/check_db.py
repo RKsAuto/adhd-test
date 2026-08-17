@@ -112,10 +112,23 @@ def main() -> int:
 
     print(f"FAIL  {message}")
     print()
-    print("Common causes:")
-    print("  * database paused (free projects idle out -- open the dashboard)")
-    print("  * wrong password")
-    print("  * password contains @ / : or # and is not percent-encoded")
+    if "password authentication failed" in message.lower():
+        print("The host was reached and rejected the password. Networking is")
+        print("fine; this is only the credential.")
+        print()
+        print("  * use the DATABASE password, not your Supabase account password")
+        print("  * unsure? reset it: Database -> Settings -> Reset database")
+        print("    password, and pick a letters-and-numbers-only password so")
+        print("    no URL encoding is involved")
+        print()
+        print("NOTE  the server saying 'user \"postgres\"' is expected on the")
+        print("      pooler even when you connect as postgres.<ref> -- it")
+        print("      authenticates the underlying role. The username is fine.")
+    else:
+        print("Common causes:")
+        print("  * database paused (free projects idle out -- open the dashboard)")
+        print("  * wrong password")
+        print("  * password contains @ / : or # and is not percent-encoded")
     return 1
 
 
