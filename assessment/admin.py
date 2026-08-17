@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -55,6 +56,58 @@ def _login_form() -> None:
             st.rerun()
         else:
             st.error("Incorrect admin key.")
+
+
+def _pending_panel() -> None:
+    """Submissions held on disk because the database was unreachable."""
+    pending = db.pending_submissions()
+    if not pending:
+        return
+
+    st.warning(
+        f"**{len(pending)} submission(s) could not be written to the database "
+        "and are being held on the container's disk.** They are not in the "
+        "export yet. Fix the connection, then import them here. This file does "
+        "not survive a container restart, so do it promptly.",
+        icon="📥",
+    )
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Student ID": r.get("student_id"),
+                    "Name": r.get("full_name"),
+                    "Submitted (UTC)": r.get("created_at"),
+                }
+                for r in pending
+            ]
+        ),
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    col1, col2 = st.columns(2)
+    if col1.button("Import into database", type="primary"):
+        try:
+            imported, still_pending = db.import_pending()
+        except Exception as exc:
+            st.error(f"Import failed: {db.sanitise_error(exc)}")
+        else:
+            if still_pending:
+                st.warning(
+                    f"Imported {imported}; {still_pending} still pending. The "
+                    "database may still be unreachable."
+                )
+            else:
+                st.success(f"Imported {imported}. Nothing left pending.")
+            st.rerun()
+    col2.download_button(
+        "Download held submissions (JSON)",
+        data=json.dumps(pending, indent=2, default=str),
+        file_name="pending-submissions.json",
+        mime="application/json",
+    )
+    st.divider()
 
 
 def _summary_metrics(rows: list[dict]) -> None:
@@ -205,6 +258,7 @@ def render() -> None:
         )
     else:
         st.caption(f"Storage backend: {db.backend_name()}")
+    _pending_panel()
     _summary_metrics(rows)
     st.divider()
 

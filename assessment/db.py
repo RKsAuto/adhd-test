@@ -38,6 +38,18 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SQLITE_PATH = os.environ.get("DB_PATH", "data/submissions.db")
 
+class StorageError(RuntimeError):
+    """A submission could not be written to the database.
+
+    ``queued`` says whether it was parked in the fallback file, and so
+    whether it can still be recovered.
+    """
+
+    def __init__(self, message: str, queued: bool) -> None:
+        super().__init__(message)
+        self.queued = queued
+
+
 metadata = MetaData()
 
 submissions = Table(
@@ -91,7 +103,7 @@ def get_engine() -> Engine:
             url = url.replace("postgres://", "postgresql://", 1)
         # Fail fast rather than hanging a page load for the TCP default when the
         # host is unreachable (a wrong or IPv6-only host, or a paused database).
-        _engine = create_engine(
+        engine = create_engine(
             url,
             pool_pre_ping=True,
             future=True,
@@ -102,14 +114,20 @@ def get_engine() -> Engine:
         directory = os.path.dirname(path)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        _engine = create_engine(
+        engine = create_engine(
             f"sqlite:///{path}",
             future=True,
             connect_args={"check_same_thread": False},
         )
 
-    metadata.create_all(_engine)
-    _add_missing_columns(_engine)
+    # Publish to the module global only once the schema is actually in place.
+    # Assigning earlier means a create_all that fails to connect still leaves a
+    # cached engine behind, and the next call short-circuits on it and skips
+    # schema setup entirely - so the app looks healthy and only fails later, at
+    # the point someone tries to save.
+    metadata.create_all(engine)
+    _add_missing_columns(engine)
+    _engine = engine
     return _engine
 
 
@@ -259,10 +277,95 @@ def save_submission(
         "duration_seconds": duration_seconds,
     }
 
-    engine = get_engine()
-    with engine.begin() as conn:
-        conn.execute(submissions.insert().values(**row))
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            conn.execute(submissions.insert().values(**row))
+    except Exception as exc:
+        # The participant has already answered every question; losing the row
+        # here is the one outcome worth spending a disk write to avoid.
+        queued = queue_failed_submission(row)
+        raise StorageError(sanitise_error(exc), queued=queued) from exc
     return submission_id
+
+
+# --------------------------------------------------------------------------
+# Fallback queue
+# --------------------------------------------------------------------------
+# When the database is unreachable a completed assessment would otherwise be
+# lost outright: the participant has answered 65 questions and there is nowhere
+# to put them. Rows are appended here instead and imported once the database is
+# back. This file is on the container's disk, so it survives a database blip
+# but NOT a container restart - it buys recovery time, it is not a substitute
+# for a reachable database.
+FALLBACK_PATH = os.environ.get("FALLBACK_PATH", "data/pending_submissions.jsonl")
+
+
+def queue_failed_submission(row: dict[str, Any]) -> bool:
+    """Append a submission that could not be saved. Returns True if stored."""
+    try:
+        directory = os.path.dirname(FALLBACK_PATH)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(FALLBACK_PATH, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, default=str) + "\n")
+        return True
+    except Exception:
+        logger.exception("could not write fallback submission")
+        return False
+
+
+def pending_submissions() -> list[dict[str, Any]]:
+    if not os.path.exists(FALLBACK_PATH):
+        return []
+    rows = []
+    try:
+        with open(FALLBACK_PATH, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+    except Exception:
+        logger.exception("could not read fallback submissions")
+    return rows
+
+
+def import_pending() -> tuple[int, int]:
+    """Insert queued submissions. Returns (imported, still_pending)."""
+    rows = pending_submissions()
+    if not rows:
+        return 0, 0
+
+    engine = get_engine()
+    remaining: list[dict[str, Any]] = []
+    imported = 0
+    existing = {r["id"] for r in fetch_all()}
+
+    for row in rows:
+        if row.get("id") in existing:
+            imported += 1  # already made it in; drop the duplicate
+            continue
+        try:
+            payload = dict(row)
+            payload["created_at"] = datetime.fromisoformat(payload["created_at"])
+            with engine.begin() as conn:
+                conn.execute(submissions.insert().values(**payload))
+            imported += 1
+        except Exception:
+            logger.exception("could not import queued submission")
+            remaining.append(row)
+
+    try:
+        if remaining:
+            with open(FALLBACK_PATH, "w", encoding="utf-8") as handle:
+                for row in remaining:
+                    handle.write(json.dumps(row, default=str) + "\n")
+        elif os.path.exists(FALLBACK_PATH):
+            os.remove(FALLBACK_PATH)
+    except Exception:
+        logger.exception("could not rewrite fallback file")
+
+    return imported, len(remaining)
 
 
 def fetch_all() -> list[dict[str, Any]]:

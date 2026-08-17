@@ -9,8 +9,10 @@ Run with:  streamlit run app.py
 
 from __future__ import annotations
 
+import json
 import os
 import time
+from datetime import datetime, timezone
 
 import streamlit as st
 
@@ -445,9 +447,14 @@ def _page_review() -> None:
             )
             st.session_state.submission_id = submission_id
             st.session_state.pop("save_error", None)
+        except db.StorageError as exc:
+            st.session_state.submission_id = None
+            st.session_state.save_error = str(exc)
+            st.session_state.save_queued = exc.queued
         except Exception as exc:  # never lose the user's feedback over a DB error
             st.session_state.submission_id = None
             st.session_state.save_error = str(exc)
+            st.session_state.save_queued = False
         st.session_state.results = results
         st.session_state.celebrated = False
         _goto(st.session_state.page_index + 1)
@@ -489,10 +496,49 @@ def _page_results() -> None:
     st.title("Your feedback")
 
     if st.session_state.get("save_error"):
-        st.error(
-            "Your results were scored but could not be saved to the database: "
-            f"{st.session_state['save_error']}"
+        if st.session_state.get("save_queued"):
+            st.warning(
+                "The database was unreachable, so your responses have been held "
+                "on the server and will be added as soon as it is back. Your "
+                "feedback below is complete either way. **Please download the "
+                "copy below and send it to whoever asked you to take this**, so "
+                "nothing depends on that recovery.",
+                icon="📥",
+            )
+        else:
+            st.error(
+                "Your responses could not be saved and could not be held for "
+                "retry. **Please download the copy below and send it to whoever "
+                "asked you to take this.**",
+                icon="🚨",
+            )
+        st.download_button(
+            "Download my responses",
+            data=json.dumps(
+                {
+                    "participant": st.session_state.participant,
+                    "responses": st.session_state.responses,
+                    "scores": {
+                        key: {
+                            "score": r.headline,
+                            "interpretation": r.band.label,
+                            **r.metrics,
+                        }
+                        for key, r in results.items()
+                    },
+                    "saved_at": datetime.now(timezone.utc).isoformat(),
+                },
+                indent=2,
+                default=str,
+            ),
+            file_name=(
+                f"assessment-{st.session_state.participant.get('student_id') or 'response'}"
+                ".json"
+            ),
+            mime="application/json",
         )
+        with st.expander("Technical detail"):
+            st.code(st.session_state["save_error"])
     elif st.session_state.submission_id:
         st.success("Your responses have been recorded. Thank you for taking part.")
 
@@ -517,6 +563,7 @@ def _page_results() -> None:
             "results",
             "submission_id",
             "save_error",
+            "save_queued",
             "celebrated",
         ):
             st.session_state.pop(key, None)
