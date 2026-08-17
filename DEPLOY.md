@@ -13,11 +13,30 @@ wiped.
 
 Either free tier is plenty; 80 submissions is a rounding error against both.
 
-**Supabase** — New project → wait for provisioning → *Project Settings →
-Database → Connection string → URI*. Use the **Session pooler** URI (port 5432).
-Replace `[YOUR-PASSWORD]` with the database password you set.
+**Supabase** — New project → wait for provisioning → click the green
+**Connect** button in the top bar of the dashboard (it is *not* under Project
+Settings; Supabase moved it). In the dialog choose **Session pooler** and copy
+the URI. Replace `[YOUR-PASSWORD]` with your database password.
+
+You must use a **pooler** host. Supabase's direct host
+(`db.<ref>.supabase.co`) is IPv6-only and Streamlit Cloud has no IPv6, so it can
+never connect.
+
+If you cannot find the dialog, build the URI by hand — you already know every
+part except the region:
+
+```
+postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:5432/postgres
+```
+
+* `<PROJECT_REF>` is the random string in your project URL, and in the direct
+  host `db.<PROJECT_REF>.supabase.co`.
+* `<REGION>` is shown on the project home page (e.g. `ap-south-1`,
+  `us-east-1`). *Project Settings → General* also lists it.
+* Port **5432** is the session pooler; 6543 is the transaction pooler.
 
 **Neon** — New project → *Dashboard → Connection Details → Connection string*.
+Neon's hosts are IPv4-reachable, so there is no pooler caveat.
 
 You end up with something like:
 
@@ -26,6 +45,19 @@ postgresql://user:password@host:5432/dbname
 ```
 
 `postgres://`-style URLs also work; the app rewrites the scheme.
+
+### Test the string before deploying
+
+Don't find out via a deploy-reboot-retry loop. Locally:
+
+```bash
+python scripts/check_db.py "postgresql://...your string..."
+```
+
+It reports the host, whether the name has an IPv4 address at all, and whether a
+real connection succeeds — and it names the Supabase direct-host and
+placeholder-password mistakes explicitly. The password is never printed. Only
+paste a string that prints `OK` into your host's secrets.
 
 > Treat this string as a password. Put it straight into the host's secrets UI —
 > don't paste it into chat, a commit, or a shared doc.
