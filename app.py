@@ -60,10 +60,79 @@ def _bridge_secrets() -> None:
 
 @st.cache_resource
 def _boot() -> dict:
-    """One-time process setup: database tables and the keep-alive thread."""
+    """One-time process setup: database tables and the keep-alive thread.
+
+    A database that cannot be reached is reported rather than raised: the
+    host redacts tracebacks, so an uncaught error here shows the operator a
+    stack trace with no cause in it. ``_page_db_error`` renders something
+    actionable instead.
+    """
     _bridge_secrets()
-    db.get_engine()
-    return keepalive.start()
+    db_error = ""
+    try:
+        db.get_engine()
+    except Exception as exc:
+        db_error = db.sanitise_error(exc)
+    return {"db_error": db_error, "keepalive": keepalive.start()}
+
+
+def _page_db_error(message: str) -> None:
+    """Explain an unreachable database without leaking the password."""
+    st.error("The app cannot reach its database, so it is not accepting "
+             "responses. Nothing has been lost.", icon="🚨")
+    st.caption("Participants see this page too, so no credentials are shown.")
+
+    target = db.describe_target()
+    if target.get("configured"):
+        st.markdown("**Configured target**")
+        st.write(
+            {
+                "host": target.get("host"),
+                "port": target.get("port"),
+                "database": target.get("database"),
+                "username": target.get("username"),
+                "password set": "yes" if target.get("has_password") else "NO",
+            }
+        )
+
+        if target.get("supabase_direct"):
+            st.warning(
+                "**This is Supabase's direct connection host, which is "
+                "IPv6-only.** Streamlit Cloud has no IPv6, so it can never "
+                "reach it — this is the usual cause. In Supabase go to "
+                "*Project Settings → Database → Connection string* and copy "
+                "the **Session pooler** URI instead. Its host looks like "
+                "`aws-0-<region>.pooler.supabase.com` and the username "
+                "includes your project ref.",
+                icon="📡",
+            )
+        elif not target.get("has_password"):
+            st.warning(
+                "No password in the connection string. Replace the "
+                "`[YOUR-PASSWORD]` placeholder with the real database "
+                "password. If it contains `@`, `/`, `:` or `#`, percent-encode "
+                "those characters."
+            )
+        else:
+            st.info(
+                "Common causes: the database is paused (free Supabase and Neon "
+                "projects idle out — open the dashboard to wake it), a wrong "
+                "password, or a host typo. If the password contains `@`, `/`, "
+                "`:` or `#`, it must be percent-encoded."
+            )
+    else:
+        st.warning(
+            "`DATABASE_URL` is not set at all. Add it under *Manage app → "
+            "Settings → Secrets*, then reboot."
+        )
+
+    with st.expander("Error detail (password removed)"):
+        st.code(message or "no detail captured")
+
+    st.caption(
+        "After changing secrets, reboot the app from *Manage app* — secrets "
+        "are read at startup."
+    )
 
 
 def _pages() -> list[dict]:
@@ -468,7 +537,11 @@ def main() -> None:
         st.write("ok")
         return
 
-    _boot()
+    boot = _boot()
+    if boot.get("db_error"):
+        _page_db_error(boot["db_error"])
+        return
+
     _init_state()
 
     if params.get("admin"):

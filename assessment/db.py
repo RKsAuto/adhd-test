@@ -32,7 +32,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,14 @@ def get_engine() -> Engine:
         # SQLAlchemy needs the postgresql+psycopg2 form
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        _engine = create_engine(url, pool_pre_ping=True, future=True)
+        # Fail fast rather than hanging a page load for the TCP default when the
+        # host is unreachable (a wrong or IPv6-only host, or a paused database).
+        _engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            future=True,
+            connect_args={"connect_timeout": 10},
+        )
     else:
         path = DEFAULT_SQLITE_PATH
         directory = os.path.dirname(path)
@@ -132,6 +139,69 @@ def _add_missing_columns(engine: Engine) -> None:
 def backend_name() -> str:
     url = os.environ.get("DATABASE_URL", "").strip()
     return "PostgreSQL" if url else f"SQLite ({DEFAULT_SQLITE_PATH})"
+
+
+def describe_target() -> dict[str, Any]:
+    """Sanitised description of the configured database.
+
+    Never includes the password: this is rendered on an error page that
+    anyone hitting the app could see.
+    """
+    raw = os.environ.get("DATABASE_URL", "").strip()
+    if not raw:
+        return {"configured": False}
+
+    if raw.startswith("postgres://"):
+        raw = raw.replace("postgres://", "postgresql://", 1)
+    try:
+        url = make_url(raw)
+    except Exception:
+        return {"configured": True, "parse_error": True}
+
+    host = url.host or ""
+    info: dict[str, Any] = {
+        "configured": True,
+        "parse_error": False,
+        "host": host,
+        "port": url.port or 5432,
+        "database": url.database,
+        "username": url.username,
+        "has_password": bool(url.password),
+        "driver": url.get_backend_name(),
+    }
+    # Supabase's direct host is IPv6-only; Streamlit Cloud cannot reach it.
+    info["supabase_direct"] = host.startswith("db.") and host.endswith(
+        ".supabase.co"
+    )
+    info["supabase_pooler"] = "pooler.supabase.com" in host
+    return info
+
+
+def check_connection() -> tuple[bool, str]:
+    """Try one connection. Returns (ok, sanitised error)."""
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True, ""
+    except Exception as exc:
+        return False, sanitise_error(exc)
+
+
+def sanitise_error(exc: Exception) -> str:
+    """Error text with any password from DATABASE_URL scrubbed out."""
+    message = f"{type(exc).__name__}: {exc}"
+    raw = os.environ.get("DATABASE_URL", "").strip()
+    if raw:
+        try:
+            password = make_url(
+                raw.replace("postgres://", "postgresql://", 1)
+            ).password
+            if password:
+                message = message.replace(password, "***")
+        except Exception:
+            pass
+    return message[:1500]
 
 
 def is_ephemeral() -> bool:

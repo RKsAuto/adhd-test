@@ -125,9 +125,24 @@ the value has no surrounding quotes-inside-quotes.
 `requirements.txt`; `psycopg2-binary` is a default dependency here. Clear the
 build cache and redeploy.
 
-**Connection refused / timeout to Postgres.** Supabase: use the pooler URI, not
-the direct one. Check the database isn't paused — free projects idle out after a
-period of inactivity, so open the dashboard before class.
+**`OperationalError` on startup / "cannot reach its database".** The app now
+renders a diagnosis instead of a redacted traceback — open it and read the
+banner. By far the most common cause on Streamlit Cloud is below.
+
+**Supabase: `db.<ref>.supabase.co` never connects.** That direct host is
+**IPv6-only** and Streamlit Cloud has no IPv6, so it can never reach it. Use the
+**Session pooler** URI instead: *Project Settings → Database → Connection
+string → Session pooler*. Its host looks like
+`aws-0-<region>.pooler.supabase.com` and its username embeds the project ref
+(`postgres.<ref>`). The app detects the direct host and says so on the error
+page.
+
+**Password with special characters.** If it contains `@`, `/`, `:` or `#`, those
+must be percent-encoded in the URL (`@` → `%40`, `#` → `%23`). Easiest fix is to
+reset the database password to something alphanumeric.
+
+**Database paused.** Free Supabase and Neon projects idle out. Open the
+dashboard to wake it, and do so before the class starts.
 
 **Admin board says no key is configured.** `ADMIN_KEY` is unset. The board
 refuses to unlock rather than defaulting to something guessable.
