@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import streamlit as st
 
-from . import db, keepalive
+from . import db, keepalive, version
 from .excel import build_workbook
 from .instruments import INSTRUMENTS
 
@@ -322,6 +322,36 @@ def render() -> None:
     _detail_view(filtered)
     st.divider()
     _keepalive_panel()
+    _build_panel()
+
+
+def _build_panel() -> None:
+    """What code and what database this instance is actually running."""
+    revision = version.git_revision()
+    target = db.describe_target()
+    with st.expander("Running build"):
+        st.caption(
+            "If a fix does not seem to have taken effect, check the commit "
+            "below against what you pushed - the host may be tracking a "
+            "different branch."
+        )
+        st.write(
+            {
+                "commit": revision["commit"],
+                "branch": revision["branch"],
+                "last change": revision["subject"],
+                "committed at": revision["committed"],
+                "python": version.python_version(),
+                "database host": target.get("host", "-- SQLite --"),
+                "database port": target.get("port", "-"),
+            }
+        )
+        if target.get("supabase_direct"):
+            st.error(
+                "This is Supabase's IPv6-only direct host. Streamlit Cloud "
+                "cannot reach it - switch to the Session pooler URI.",
+                icon="📡",
+            )
 
 
 def _as_utc(value) -> datetime:
