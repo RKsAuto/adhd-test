@@ -1,17 +1,29 @@
 """Self-ping keep-alive.
 
-Free hosting tiers (Streamlit Community Cloud, Render, Railway) put an app to
-sleep after a period without traffic. This module starts one background thread
-that requests the app's own public URL on an interval so the container stays
-warm.
+Free hosting tiers put an app to sleep after a period without traffic. This
+module starts one background thread that requests the app's own public URL on
+an interval so the container keeps seeing requests.
 
 Configure with environment variables:
 
     SELF_PING_URL       full public URL of the app (required to enable)
     SELF_PING_INTERVAL  seconds between pings (default 600)
 
-The ping requests ``?ping=1``, which ``app.py`` serves as a tiny health page
-rather than rendering the whole questionnaire.
+What this actually does, measured rather than assumed: a plain HTTP GET to a
+Streamlit app returns the static front-end shell. The Python script runs only
+when a browser opens a websocket session, so this ping does NOT execute the
+app or create a Streamlit session - it generates HTTP traffic to the
+container and nothing more. That is enough for hosts that idle on request
+activity (Render, Railway). Whether Streamlit Community Cloud's own
+inactivity logic counts it is not something this code can guarantee.
+
+It also cannot wake a container the host has already stopped, since there is
+nothing running to send the request. Treat it as a cheap hedge, not a
+guarantee: to be certain an app is warm for a known event, open it in a
+browser a few minutes beforehand.
+
+The ``?ping=1`` parameter is still useful as a fast manual health check -
+opened in a browser it renders "ok" without touching the database.
 """
 
 from __future__ import annotations

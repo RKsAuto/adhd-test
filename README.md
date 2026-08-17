@@ -87,14 +87,22 @@ dropping it.
 ### Keep-alive
 
 Free tiers idle an app to sleep after a period without traffic. Set
-`SELF_PING_URL` to the app's own public URL and a daemon thread will request
-`?ping=1` on an interval to keep the container warm. `?ping=1` renders a tiny
-health response rather than the full questionnaire, so the ping is cheap. The
-admin board shows ping count, last status and last ping time.
+`SELF_PING_URL` to the app's own public URL and a daemon thread requests it on
+an interval. The admin board shows ping count, last status and last ping time.
 
-Note that this keeps a *running* container awake; it cannot wake a container that
-a host has already stopped. If your host suspends by schedule rather than by
-idleness, use an external uptime monitor instead.
+**Be clear about what this buys you.** A plain HTTP GET to a Streamlit app
+returns the static front-end shell; the Python script only runs when a browser
+opens a websocket session. So the ping generates HTTP traffic to the container
+but does not execute the app or create a Streamlit session. That satisfies hosts
+that idle on request activity (Render, Railway). Whether Streamlit Community
+Cloud's inactivity logic counts it is not guaranteed.
+
+It also cannot wake a container the host has already stopped — nothing is
+running to send the request.
+
+For a known event like a class, don't rely on it: **open the app in a browser a
+few minutes beforehand.** That is the one method that reliably guarantees a warm
+app, and it also absorbs the cold-start delay so the first participant doesn't.
 
 ## Admin board
 

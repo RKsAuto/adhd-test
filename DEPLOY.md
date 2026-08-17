@@ -93,6 +93,15 @@ student IDs. Keep it out of the repo and off shared slides.
    SELF_PING_INTERVAL = "600"
    ```
 
+   Confirm it is running: admin board → **Keep-alive status** should show a
+   rising ping count and a last status of 200 (the first ping is delayed 60s).
+
+   Community Cloud sleeps apps after about a week of no traffic, not minutes,
+   so for a class in the near future this is a hedge rather than a necessity.
+   The ping produces HTTP traffic but does not open a Streamlit session, so
+   treat **opening the app in a browser a few minutes before the class** as the
+   thing that actually guarantees it is awake and warm.
+
 Community Cloud apps are **publicly reachable by default** — anyone with the
 link can open the questionnaire. That is usually what you want for a class, but
 it does mean the URL is the only thing standing between the public and your form.
