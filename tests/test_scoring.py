@@ -6,6 +6,7 @@ import pytest
 
 from assessment.instruments import (
     ASRS,
+    ASRS_PART_B,
     ASRS_SHADED_THRESHOLD,
     HSPS,
     INSTRUMENTS,
@@ -15,6 +16,7 @@ from assessment.instruments import (
     WHO5,
 )
 from assessment.scoring import (
+    asrs_breakdown,
     score_asrs,
     score_all,
     score_hsps,
@@ -55,27 +57,57 @@ def test_asrs_shading_matches_source_form():
     assert sometimes_in_part_b == [9, 12, 16, 18]
 
 
-def test_asrs_all_never_is_negative_screen():
+def test_asrs_all_never_is_zero_and_negative_screen():
     result = score_asrs(fill(ASRS, 0))
     assert result.headline == 0
+    assert result.metrics["part_a_sum"] == 0
+    assert result.metrics["part_b_sum"] == 0
+    assert result.metrics["part_a_shaded_count"] == 0
     assert result.metrics["part_a_screen_positive"] == "No"
 
 
-def test_asrs_all_very_often_is_positive_screen():
+def test_asrs_all_very_often_is_maximum_and_positive_screen():
     result = score_asrs(fill(ASRS, 4))
-    assert result.headline == 6
+    # 6 items x 4 = 24 for Part A, 12 items x 4 = 48 for Part B
+    assert result.metrics["part_a_sum"] == 24
+    assert result.metrics["part_b_sum"] == 48
+    assert result.headline == 72
+    assert result.metrics["max_possible"] == 72
+    assert result.metrics["mean_item_score"] == 4.0
+    assert result.metrics["part_a_shaded_count"] == 6
     assert result.metrics["part_a_screen_positive"] == "Yes"
     assert result.metrics["part_b_shaded_count"] == 12
-    assert result.metrics["total_raw_sum"] == 18 * 4
+
+
+def test_asrs_total_uses_the_zero_to_four_point_scheme():
+    """Never=0, Rarely=1, Sometimes=2, Often=3, Very Often=4."""
+    for value, expected_total in [(0, 0), (1, 18), (2, 36), (3, 54), (4, 72)]:
+        result = score_asrs(fill(ASRS, value))
+        assert result.headline == expected_total
+        assert result.metrics["part_a_sum"] == 6 * value
+        assert result.metrics["part_b_sum"] == 12 * value
+
+
+def test_asrs_total_is_the_sum_of_both_parts():
+    responses = fill(ASRS, 0)
+    responses["asrs_1"] = 4   # Part A
+    responses["asrs_3"] = 2   # Part A
+    responses["asrs_7"] = 3   # Part B
+    responses["asrs_18"] = 1  # Part B
+    result = score_asrs(responses)
+    assert result.metrics["part_a_sum"] == 6
+    assert result.metrics["part_b_sum"] == 4
+    assert result.headline == 10
 
 
 def test_asrs_sometimes_everywhere_counts_only_items_1_to_3():
     """'Sometimes' is inside the shading for items 1-3 but not 4-6."""
     result = score_asrs(fill(ASRS, 2))
-    assert result.headline == 3
+    assert result.metrics["part_a_shaded_count"] == 3
     assert result.metrics["part_a_screen_positive"] == "No"
     # Part B: only items 9, 12, 16, 18 shade from Sometimes
     assert result.metrics["part_b_shaded_count"] == 4
+    assert result.headline == 36  # the total is unaffected by shading
 
 
 def test_asrs_threshold_is_four_marks():
@@ -86,16 +118,39 @@ def test_asrs_threshold_is_four_marks():
     # a fourth, using an item that needs 'Often' -> positive
     responses["asrs_4"] = 3
     result = score_asrs(responses)
-    assert result.headline == 4
+    assert result.metrics["part_a_shaded_count"] == 4
     assert result.metrics["part_a_screen_positive"] == "Yes"
 
 
 def test_asrs_often_on_item_4_counts_but_sometimes_does_not():
     responses = fill(ASRS, 0)
     responses["asrs_4"] = 2
-    assert score_asrs(responses).headline == 0
+    assert score_asrs(responses).metrics["part_a_shaded_count"] == 0
     responses["asrs_4"] = 3
-    assert score_asrs(responses).headline == 1
+    assert score_asrs(responses).metrics["part_a_shaded_count"] == 1
+
+
+def test_asrs_high_total_alone_is_not_a_positive_screen():
+    """A total driven by Part B must not flip the screening decision."""
+    responses = fill(ASRS, 0)
+    for item_id in ASRS_PART_B:
+        responses[item_id] = 4
+    result = score_asrs(responses)
+    assert result.headline == 48
+    assert result.metrics["part_a_screen_positive"] == "No"
+
+
+def test_asrs_breakdown_covers_every_item():
+    responses = fill(ASRS, 3)
+    rows = asrs_breakdown(responses)
+    assert len(rows) == 18
+    assert [r["#"] for r in rows] == list(range(1, 19))
+    assert sum(r["Points"] for r in rows) == 54
+    assert [r["Part"] for r in rows].count("A") == 6
+    assert [r["Part"] for r in rows].count("B") == 12
+    assert all(r["Response"] == "Often" for r in rows)
+    # 'Often' is inside the shaded range for every item
+    assert all(r["Counts toward screener"] == "Yes" for r in rows)
 
 
 def test_asrs_incomplete_raises():

@@ -9,7 +9,7 @@ database that the admin board exports as one combined Excel workbook.
 
 | Questionnaire | Items | Scoring implemented |
 | --- | --- | --- |
-| **ASRS-v1.1** Adult ADHD Self-Report Scale | 18 | Part A shaded-box count; 4+ marks = symptoms highly consistent with adult ADHD |
+| **ASRS-v1.1** Adult ADHD Self-Report Scale | 18 | All items scored 0–4 (total 0–72, Part A 0–24, Part B 0–48), plus the Part A shaded-box screener: 4+ marks = symptoms highly consistent with adult ADHD |
 | **PSS-10** Perceived Stress Scale | 10 | Items 4/5/7/8 reversed, summed 0–40, banded low / moderate / high |
 | **WHO-5** Well-being Index | 5 | Raw 0–25, percentage = raw × 4 |
 | **rMEQ** Morningness/Eveningness | 5 | Per-option weights summed, 4–25, evening → morning |
@@ -25,6 +25,19 @@ reruns per participant instead of 65**, which is what keeps the app responsive
 when a full class starts at the same time. Streamlit runs each session's script
 in its own thread inside one process, so per-click reruns are the thing that
 actually bites at that concurrency.
+
+### How the ASRS is scored here
+
+Two numbers, and they answer different questions:
+
+* **Point total** — every one of the 18 items scores Never=0, Rarely=1,
+  Sometimes=2, Often=3, Very Often=4. Part A totals 0–24, Part B 0–48, the whole
+  scale 0–72. The results page shows the per-item arithmetic behind it. This is a
+  severity index, useful for comparing people and for research. **The source
+  instrument publishes no cut-off for it**, so a high total is not by itself a
+  positive screen.
+* **Screening decision** — the published ASRS-v1.1 rule, based on Part A's
+  shaded-box count, unchanged and still shown alongside the total.
 
 ### A note on the ASRS shading
 

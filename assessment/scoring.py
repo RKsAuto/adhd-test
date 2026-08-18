@@ -94,6 +94,11 @@ def score_asrs(responses: Responses) -> ScoreResult:
     part_a_count = len(part_a_hits)
     positive = part_a_count >= 4
 
+    # Point totals over the 0-4 scale (Never=0 ... Very Often=4).
+    part_a_sum = sum(responses[i] for i in ASRS_PART_A)
+    part_b_sum = sum(responses[i] for i in ASRS_PART_B)
+    total_sum = part_a_sum + part_b_sum
+
     if positive:
         band = Band(
             label="Symptoms highly consistent with ADHD in adults",
@@ -120,25 +125,57 @@ def score_asrs(responses: Responses) -> ScoreResult:
     return ScoreResult(
         key="asrs",
         name=ASRS.short_name,
-        headline=part_a_count,
-        headline_label="part_a_shaded_count",
+        headline=total_sum,
+        headline_label="total_score",
         band=band,
         metrics={
+            "part_a_sum": part_a_sum,
+            "part_b_sum": part_b_sum,
+            "total_score": total_sum,
+            "max_possible": 4 * len(ASRS.items),
+            "mean_item_score": round(total_sum / len(ASRS.items), 2),
+            "part_a_shaded_count": part_a_count,
             "part_a_screen_positive": "Yes" if positive else "No",
             "part_b_shaded_count": len(part_b_hits),
-            "part_a_raw_sum": sum(responses[i] for i in ASRS_PART_A),
-            "part_b_raw_sum": sum(responses[i] for i in ASRS_PART_B),
-            "total_raw_sum": sum(responses[i] for i in ASRS.item_ids),
         },
         notes=[
-            "Part A (6 items) is the ASRS-v1.1 Screener and is the only part with a "
-            "scoring threshold.",
-            "Part B frequencies are additional cues only - the source instrument "
-            "assigns no total score or diagnostic likelihood to those 12 items.",
-            "Raw sums are recorded for research use; they are not part of the "
-            "published scoring rule.",
+            "Every item is scored Never=0, Rarely=1, Sometimes=2, Often=3, "
+            "Very Often=4. Part A (items 1-6) can reach 24, Part B (items 7-18) "
+            "can reach 48, so the total runs 0-72.",
+            "The screening decision above comes from Part A's shaded-box count, "
+            "which is the published ASRS-v1.1 rule. The point totals are a "
+            "severity index for comparison and research; the source instrument "
+            "publishes no cut-off for them, so a high total is not by itself a "
+            "positive screen.",
+            "Part B frequencies are additional cues - the source assigns them no "
+            "diagnostic likelihood of their own.",
         ],
     )
+
+
+def asrs_breakdown(responses: Responses) -> list[dict[str, object]]:
+    """Per-item arithmetic behind the ASRS totals, in item order."""
+    rows: list[dict[str, object]] = []
+    for item in ASRS.items:
+        value = responses.get(item.id)
+        label = next(
+            (lbl for lbl, val in item.options if val == value), ""
+        ) if value is not None else ""
+        rows.append(
+            {
+                "Part": "A" if item.id in ASRS_PART_A else "B",
+                "#": item.number,
+                "Question": item.text,
+                "Response": label,
+                "Points": value,
+                "Counts toward screener": (
+                    "Yes"
+                    if value is not None and value >= ASRS_SHADED_THRESHOLD[item.id]
+                    else "No"
+                ),
+            }
+        )
+    return rows
 
 
 # --------------------------------------------------------------------------

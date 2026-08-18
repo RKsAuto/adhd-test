@@ -14,11 +14,12 @@ import os
 import time
 from datetime import datetime, timezone
 
+import pandas as pd
 import streamlit as st
 
 from assessment import admin, db, keepalive
 from assessment.instruments import ASRS, HSPS, INSTRUMENTS, PSS, RMEQ, WHO5, Instrument
-from assessment.scoring import ScoreResult, score_all
+from assessment.scoring import ScoreResult, asrs_breakdown, score_all
 
 st.set_page_config(
     page_title="ADHD Screening Battery",
@@ -499,11 +500,42 @@ def _render_result(result: ScoreResult) -> None:
                 "Interpretation band is the conventional one from the wider "
                 "literature; the source questionnaire does not print cut-offs."
             )
+        if result.key == "asrs":
+            _asrs_arithmetic(result)
+
         with st.expander("Details and scoring notes"):
             if result.metrics:
                 st.write(result.metrics)
             for note in result.notes:
                 st.markdown(f"- {note}")
+
+
+def _asrs_arithmetic(result: ScoreResult) -> None:
+    """Show how the ASRS total is built, item by item."""
+    metrics = result.metrics
+    cols = st.columns(3)
+    cols[0].metric("Part A (items 1-6)", f"{metrics['part_a_sum']} / 24")
+    cols[1].metric("Part B (items 7-18)", f"{metrics['part_b_sum']} / 48")
+    cols[2].metric("Total (all 18)", f"{metrics['total_score']} / 72")
+
+    st.caption(
+        f"Part A {metrics['part_a_sum']} + Part B {metrics['part_b_sum']} "
+        f"= **{metrics['total_score']} out of 72** · mean "
+        f"{metrics['mean_item_score']} per item · scoring Never=0, Rarely=1, "
+        "Sometimes=2, Often=3, Very Often=4."
+    )
+    st.caption(
+        f"Screener: {metrics['part_a_shaded_count']} of 6 Part A items in the "
+        f"shaded range (4+ = positive) → **{metrics['part_a_screen_positive']}**. "
+        "The screening decision uses this count, not the point total."
+    )
+
+    with st.expander("Question-by-question scores"):
+        st.dataframe(
+            pd.DataFrame(asrs_breakdown(st.session_state.responses)),
+            hide_index=True,
+            use_container_width=True,
+        )
 
 
 def _page_results() -> None:

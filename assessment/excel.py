@@ -23,10 +23,12 @@ PARTICIPANT_COLUMNS = [
 ]
 
 SCORE_COLUMNS = [
+    ("asrs_part_a_sum", "ASRS Part A score (/24)"),
+    ("asrs_part_b_sum", "ASRS Part B score (/48)"),
+    ("asrs_total_raw", "ASRS total score (/72)"),
     ("asrs_part_a_count", "ASRS Part A shaded count (/6)"),
     ("asrs_screen_positive", "ASRS screen positive"),
     ("asrs_part_b_count", "ASRS Part B shaded count (/12)"),
-    ("asrs_total_raw", "ASRS total raw sum (/72)"),
     ("pss_total", "PSS-10 total (/40)"),
     ("pss_band", "PSS-10 interpretation"),
     ("who5_raw", "WHO-5 raw (/25)"),
@@ -131,12 +133,16 @@ def _scoring_notes_frame() -> pd.DataFrame:
     notes = [
         (
             "ASRS-v1.1",
-            "Part A (items 1-6) is the screener. Count responses falling in the "
-            "darkly shaded boxes: items 1-3 count from 'Sometimes' upward, items 4-6 "
-            "from 'Often' upward. 4 or more shaded marks = symptoms highly consistent "
-            "with ADHD in adults, further investigation warranted. Part B (items "
-            "7-18) has no total score or diagnostic likelihood; items 9, 12, 16 and "
-            "18 shade from 'Sometimes' upward, the rest from 'Often' upward.",
+            "All 18 items are scored Never=0, Rarely=1, Sometimes=2, Often=3, Very "
+            "Often=4. Part A (items 1-6) totals 0-24, Part B (items 7-18) totals "
+            "0-48, and the whole scale totals 0-72. These point totals are a "
+            "severity index: the source instrument publishes no cut-off for them. "
+            "The screening decision uses Part A's shaded-box count instead: items "
+            "1-3 count from 'Sometimes' upward and items 4-6 from 'Often' upward, "
+            "and 4 or more shaded marks = symptoms highly consistent with ADHD in "
+            "adults, further investigation warranted. In Part B, items 9, 12, 16 and "
+            "18 shade from 'Sometimes' upward and the rest from 'Often' upward; "
+            "those marks are cues only, with no diagnostic likelihood of their own.",
         ),
         (
             "PSS-10",
