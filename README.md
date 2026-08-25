@@ -1,4 +1,4 @@
-# ADHD Screening Battery
+# Digital Psychometric Assessments
 
 A single Streamlit front end that walks a participant through five questionnaires
 one section at a time (OA style), scores each one exactly as its source document

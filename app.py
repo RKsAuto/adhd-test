@@ -1,4 +1,4 @@
-"""ADHD screening battery - single-page Streamlit front end.
+"""Digital Psychometric Assessments - single-page Streamlit front end.
 
 Sections are presented one at a time, OA style: participant details, then each
 instrument in turn, then a review step, then feedback. Results are written to
@@ -22,7 +22,7 @@ from assessment.instruments import ASRS, HSPS, INSTRUMENTS, PSS, RMEQ, WHO5, Ins
 from assessment.scoring import ScoreResult, asrs_breakdown, score_all
 
 st.set_page_config(
-    page_title="ADHD Screening Battery",
+    page_title="Digital Psychometric Assessments",
     page_icon="🧠",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -266,7 +266,7 @@ def _harvest_items(items: list) -> list[str]:
 # Pages
 # --------------------------------------------------------------------------
 def _page_intro() -> None:
-    st.title("🧠 ADHD Screening Battery")
+    st.title("🧠 Digital Psychometric Assessments")
     st.write(
         "This assessment brings five validated questionnaires together in one "
         "sitting. You will move through them one section at a time, and you will "
@@ -302,7 +302,10 @@ def _page_intro() -> None:
         _goto(1)
 
 
-GENDER_OPTIONS = ["Prefer not to say", "Female", "Male", "Non-binary", "Other"]
+# Options for sex assigned at birth. "Non-binary" and "Other" belonged to the
+# gender question this replaced and do not apply to what is recorded on a birth
+# certificate, so they are not offered here.
+SEX_AT_BIRTH_OPTIONS = ["Prefer not to say", "Female", "Male", "Intersex"]
 
 
 def _page_details() -> None:
@@ -314,7 +317,10 @@ def _page_details() -> None:
     st.session_state.setdefault("w_student_id", participant.get("student_id", ""))
     st.session_state.setdefault("w_email", participant.get("email", ""))
     st.session_state.setdefault("w_age", participant.get("age"))
-    st.session_state.setdefault("w_gender", participant.get("gender", GENDER_OPTIONS[0]))
+    st.session_state.setdefault(
+        "w_sex_at_birth",
+        participant.get("sex_at_birth", SEX_AT_BIRTH_OPTIONS[0]),
+    )
     st.session_state.setdefault("w_occupation", participant.get("occupation", ""))
 
     with st.form("form_details"):
@@ -331,7 +337,9 @@ def _page_details() -> None:
         col1.number_input(
             "Age", min_value=0, max_value=120, placeholder="Optional", key="w_age"
         )
-        col2.selectbox("Gender", GENDER_OPTIONS, key="w_gender")
+        col2.selectbox(
+            "Sex assigned at birth", SEX_AT_BIRTH_OPTIONS, key="w_sex_at_birth"
+        )
         st.text_input("Occupation", key="w_occupation")
 
         left, right = st.columns([1, 1])
@@ -349,7 +357,7 @@ def _page_details() -> None:
             "student_id": st.session_state.w_student_id,
             "email": st.session_state.w_email,
             "age": st.session_state.w_age,
-            "gender": st.session_state.w_gender,
+            "sex_at_birth": st.session_state.w_sex_at_birth,
             "occupation": st.session_state.w_occupation,
         }
     )
@@ -646,7 +654,7 @@ def main() -> None:
         return
 
     with st.sidebar:
-        st.markdown("### ADHD Screening Battery")
+        st.markdown("### Digital Psychometric Assessments")
         st.caption(
             "Five questionnaires, scored exactly as their source documents "
             "prescribe."

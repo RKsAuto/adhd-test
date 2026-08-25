@@ -183,7 +183,7 @@ def _detail_view(rows: list[dict]) -> None:
                 "Student ID": submission.get("student_id"),
                 "Email": submission.get("email"),
                 "Age": submission.get("age"),
-                "Gender": submission.get("gender"),
+                "Sex assigned at birth": submission.get("sex_at_birth"),
                 "Occupation": submission.get("occupation"),
                 "Duration (s)": submission.get("duration_seconds"),
             }

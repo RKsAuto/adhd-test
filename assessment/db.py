@@ -62,7 +62,7 @@ submissions = Table(
     Column("student_id", String(60), index=True),
     Column("email", String(200), index=True),
     Column("age", Integer),
-    Column("gender", String(50)),
+    Column("sex_at_birth", String(50)),
     Column("occupation", String(200)),
     Column("notes", Text),
     # headline scores, denormalised so the admin table and filters stay fast
@@ -257,7 +257,7 @@ def save_submission(
         "student_id": participant.get("student_id"),
         "email": participant.get("email"),
         "age": participant.get("age"),
-        "gender": participant.get("gender"),
+        "sex_at_birth": participant.get("sex_at_birth"),
         "occupation": participant.get("occupation"),
         "notes": participant.get("notes"),
         "asrs_part_a_count": metric("asrs", "part_a_shaded_count"),

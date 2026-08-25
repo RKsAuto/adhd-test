@@ -16,7 +16,7 @@ PARTICIPANT_COLUMNS = [
     ("full_name", "Name"),
     ("email", "Email"),
     ("age", "Age"),
-    ("gender", "Gender"),
+    ("sex_at_birth", "Sex assigned at birth"),
     ("occupation", "Occupation"),
     ("duration_seconds", "Duration (s)"),
     ("notes", "Participant notes"),
