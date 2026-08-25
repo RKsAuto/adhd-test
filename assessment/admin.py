@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -364,20 +365,54 @@ def _as_utc(value) -> datetime:
 
 def _keepalive_panel() -> None:
     state = keepalive.status()
-    with st.expander("Keep-alive status"):
+    pings = int(state.get("ping_count") or 0)
+    errors = int(state.get("error_count") or 0)
+
+    if not state.get("enabled"):
+        label = "Keep-alive: off"
+    elif errors and not pings:
+        label = "Keep-alive: failing"
+    elif pings:
+        label = f"Keep-alive: running ({pings} ping{'s' if pings != 1 else ''})"
+    else:
+        label = "Keep-alive: starting"
+
+    with st.expander(label):
         if not state.get("enabled"):
             st.info(
                 "Self-ping is off. Set `SELF_PING_URL` to this app's public URL "
-                "(and optionally `SELF_PING_INTERVAL`, default 600s) to keep the "
-                "container awake."
+                "(and optionally `SELF_PING_INTERVAL`, default 600s), then "
+                "**reboot** — it is read once at startup. If you have set it and "
+                "still see this, the secret is not reaching the app."
             )
             return
+
+        started = state.get("started_at")
+        waiting = pings == 0 and errors == 0
+        if waiting:
+            due = ""
+            if started:
+                elapsed = time.time() - float(started)
+                remaining = max(0, min(60, int(state.get("interval") or 600)) - elapsed)
+                due = f" First ping due in about {int(remaining)}s."
+            st.info(
+                "The pinger is running but has not sent anything yet. The first "
+                f"ping is deliberately delayed so it does not compete with a cold "
+                f"start.{due}"
+            )
+        elif errors and not pings:
+            st.error(
+                "Every ping has failed. Check `SELF_PING_URL` is this app's own "
+                "public URL, reachable from the internet, and spelled with its "
+                "scheme (https://...)."
+            )
+
         st.write(
             {
                 "URL": state.get("url"),
                 "Interval (s)": state.get("interval"),
-                "Pings sent": state.get("ping_count"),
-                "Errors": state.get("error_count"),
+                "Pings sent": pings,
+                "Errors": errors,
                 "Last status": state.get("last_status"),
                 "Last ping": (
                     datetime.fromtimestamp(
@@ -387,4 +422,12 @@ def _keepalive_panel() -> None:
                     else "not yet"
                 ),
             }
+        )
+        st.caption(
+            "The pinger starts when the app is first opened in a browser after a "
+            "reboot — a plain HTTP request returns the static page without running "
+            "the script, so nothing starts until a real visit. It also only "
+            "generates HTTP traffic; it does not open a Streamlit session, so "
+            "treat it as a hedge and open the app yourself shortly before an event "
+            "that matters."
         )

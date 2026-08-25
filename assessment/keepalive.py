@@ -46,6 +46,7 @@ _state: dict[str, object] = {
     "enabled": False,
     "url": None,
     "interval": DEFAULT_INTERVAL,
+    "started_at": None,
     "last_ping": None,
     "last_status": None,
     "ping_count": 0,
@@ -94,7 +95,14 @@ def start() -> dict[str, object]:
     with _lock:
         if _thread is not None and _thread.is_alive():
             return dict(_state)
-        _state.update({"enabled": True, "url": url, "interval": interval})
+        _state.update(
+            {
+                "enabled": True,
+                "url": url,
+                "interval": interval,
+                "started_at": time.time(),
+            }
+        )
         _thread = threading.Thread(
             target=_loop, args=(url, interval), name="self-ping", daemon=True
         )
