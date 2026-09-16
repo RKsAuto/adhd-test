@@ -79,12 +79,25 @@ def _boot() -> dict:
     return {"db_error": db_error, "keepalive": keepalive.start()}
 
 
+def _key_error_line(message: str) -> str:
+    """The one line of a driver traceback that actually says what went wrong."""
+    for line in (message or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("(Background on this error"):
+            continue
+        return line
+    return message or "no detail captured"
+
+
 def _page_db_error(message: str) -> None:
     """Explain an unreachable database without leaking the password."""
     st.error("The app cannot reach its database, so it is not accepting "
              "responses. Nothing has been lost.", icon="🚨")
     st.caption("Participants see this page too, so no credentials are shown.")
 
+    lowered = (message or "").lower()
     target = db.describe_target()
     if target.get("configured"):
         st.markdown("**Configured target**")
@@ -98,7 +111,36 @@ def _page_db_error(message: str) -> None:
             }
         )
 
-        if "password authentication failed" in (message or "").lower():
+        # The reason, shown rather than hidden. It is already password-scrubbed,
+        # and leaving it behind an expander turned every failure into a round
+        # trip of "open the expander and tell me what it says".
+        st.markdown("**What the server said**")
+        st.code(_key_error_line(message), language="text")
+
+        if "tenant or user not found" in lowered:
+            username = str(target.get("username") or "")
+            ref = username.split(".", 1)[1] if "." in username else ""
+            ref_note = (
+                f"Your connection string claims project ref `{ref}` — confirm "
+                "that matches the ref in your dashboard URL."
+                if ref
+                else "Your username has no `.<project-ref>` suffix at all, "
+                "which on the pooler is itself enough to cause this."
+            )
+            st.warning(
+                "**The pooler does not recognise this project — almost always "
+                "the wrong region in the hostname.** The `aws-0-<region>` part "
+                "must match where your project actually lives, and it is easy "
+                "to copy an example region by mistake.\n\n"
+                "Open your Supabase dashboard, click **Connect** in the top "
+                "bar, choose **Session pooler**, and copy that URI verbatim "
+                "rather than editing one by hand. Check two things in it:\n\n"
+                "- the region in `aws-0-<region>.pooler.supabase.com`\n"
+                "- the username is `postgres.<project-ref>`, not plain "
+                "`postgres`\n\n" + ref_note,
+                icon="🌏",
+            )
+        elif "password authentication failed" in lowered:
             st.warning(
                 "**The host was reached and rejected the password.** DNS and "
                 "networking are fine, so this is only the credential.\n\n"
@@ -116,13 +158,36 @@ def _page_db_error(message: str) -> None:
                 "role. Your username is not the problem.",
                 icon="🔑",
             )
+        elif "max client connections" in lowered or "too many clients" in lowered:
+            st.warning(
+                "**The pooler is out of connections.** Reboot the app to drop "
+                "any connections a previous run left behind. If it recurs "
+                "under load, lower the pool size or move to the transaction "
+                "pooler on port 6543.",
+                icon="🔌",
+            )
+        elif "could not translate host name" in lowered or "name or service" in lowered:
+            st.warning(
+                "**The hostname does not resolve.** Check it for typos. If it "
+                "looks like `db.<ref>.supabase.co` you are on the IPv6-only "
+                "direct host, which Streamlit Cloud cannot reach — use the "
+                "Session pooler URI instead.",
+                icon="📡",
+            )
+        elif "timeout" in lowered or "timed out" in lowered:
+            st.warning(
+                "**The connection timed out.** The host resolved but never "
+                "answered — usually a firewall, or a paused project. Open the "
+                "Supabase dashboard and confirm the project is Healthy.",
+                icon="⏱️",
+            )
         elif target.get("supabase_direct"):
             st.warning(
                 "**This is Supabase's direct connection host, which is "
                 "IPv6-only.** Streamlit Cloud has no IPv6, so it can never "
-                "reach it — this is the usual cause. In Supabase go to "
-                "*Project Settings → Database → Connection string* and copy "
-                "the **Session pooler** URI instead. Its host looks like "
+                "reach it — this is the usual cause. In Supabase click "
+                "**Connect** in the dashboard's top bar and copy the "
+                "**Session pooler** URI instead. Its host looks like "
                 "`aws-0-<region>.pooler.supabase.com` and the username "
                 "includes your project ref.",
                 icon="📡",
@@ -147,7 +212,7 @@ def _page_db_error(message: str) -> None:
             "Settings → Secrets*, then reboot."
         )
 
-    with st.expander("Error detail (password removed)"):
+    with st.expander("Full error detail (password removed)"):
         st.code(message or "no detail captured")
 
     st.caption(

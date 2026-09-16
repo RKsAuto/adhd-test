@@ -112,7 +112,16 @@ def main() -> int:
 
     print(f"FAIL  {message}")
     print()
-    if "password authentication failed" in message.lower():
+    low = message.lower()
+    if "tenant or user not found" in low:
+        print("The pooler does not recognise this project. Almost always the")
+        print("region in the hostname is wrong.")
+        print()
+        print("  * aws-0-<REGION>.pooler.supabase.com must match your project's")
+        print("    actual region -- copy the Session pooler URI from the")
+        print("    dashboard's Connect button rather than editing one by hand")
+        print("  * the username must be postgres.<project-ref>, not postgres")
+    elif "password authentication failed" in low:
         print("The host was reached and rejected the password. Networking is")
         print("fine; this is only the credential.")
         print()
@@ -124,6 +133,9 @@ def main() -> int:
         print("NOTE  the server saying 'user \"postgres\"' is expected on the")
         print("      pooler even when you connect as postgres.<ref> -- it")
         print("      authenticates the underlying role. The username is fine.")
+    elif "max client connections" in low or "too many clients" in low:
+        print("The pooler is out of connections. Reboot the app to drop any")
+        print("left behind by a previous run.")
     else:
         print("Common causes:")
         print("  * database paused (free projects idle out -- open the dashboard)")
